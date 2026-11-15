@@ -1,7 +1,10 @@
 import { configured, signIn, signOutUser, watchUser, sendLink, finishLink } from './firebase.js';
 import {
-  isMember, listRecipes, getRecipe, cookedHistory, setRating, addNote, deleteNote, saveRecipes, deleteRecipe,
+  isMember, listRecipes, getRecipe, cookedHistory, getHistory, setRating, addNote, deleteNote, saveRecipes, deleteRecipe,
 } from './store.js';
+import { star, starsShow, ICON, toast } from './ui.js';
+import { isWantToTry } from './planner.js';
+import { showPlan } from './plan-view.js';
 import {
   esc, ingredientHTML, ingredientPlain, stepHTML, stepPlain, stepIngredientIds, minutes, niceDate,
 } from './format.js';
@@ -9,26 +12,7 @@ import { SAMPLE_RECIPES } from '../data/sample-recipes.js';
 
 const app = document.getElementById('app');
 const cookEl = document.getElementById('cook');
-const toastEl = document.getElementById('toast');
-
 // ---------- small helpers ----------
-
-const STAR_PATH = 'M12 2.6l2.9 6 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9z';
-const star = filled => `<svg class="star ${filled ? 'on' : ''}" viewBox="0 0 24 24" aria-hidden="true"><path d="${STAR_PATH}"/></svg>`;
-const starsShow = n => `<span class="stars" aria-label="${n ? `${n} of 5 stars` : 'Not rated'}">${[1, 2, 3, 4, 5].map(i => star(i <= n)).join('')}</span>`;
-const ICON = {
-  clock: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
-  search: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>',
-  back: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
-};
-
-let toastTimer;
-function toast(msg) {
-  toastEl.textContent = msg;
-  toastEl.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2400);
-}
 
 function totalTime(r) { return minutes((r.prepMin || 0) + (r.cookMin || 0)); }
 
@@ -42,12 +26,12 @@ let signedIn = false;
 
 async function route() {
   if (!signedIn) return;
-  const [page, id] = location.hash.replace(/^#\/?/, '').split('/');
+  const [page, id, extra] = location.hash.replace(/^#\/?/, '').split('/');
   closeCook();
   window.scrollTo(0, 0);
-  if (page === 'recipe' && id) { setNav('recipes'); return showRecipe(decodeURIComponent(id)); }
+  if (page === 'recipe' && id) { setNav('recipes'); return showRecipe(decodeURIComponent(id), Number(extra) || null); }
   if (page === 'add') { setNav('recipes'); return showAdd(); }
-  if (page === 'plan') { setNav('plan'); return showSoon('Monthly planner', 'Put recipes on nights, add leftovers and restaurant nights, and auto-fill the rest of the month.'); }
+  if (page === 'plan') { setNav('plan'); return showPlan(app, id); }
   if (page === 'grocery') { setNav('grocery'); return showSoon('Grocery run', 'Build a list from the next seven days, check off what you already have, and copy the rest into Google Keep.'); }
   setNav('recipes');
   return showLibrary();
@@ -136,8 +120,8 @@ if (!configured) {
 // ---------- recipe library ----------
 
 async function showLibrary() {
-  const recipes = await listRecipes();
-  const histories = Object.fromEntries(await Promise.all(recipes.map(async r => [r.id, await cookedHistory(r.id)])));
+  const [recipes, history] = await Promise.all([listRecipes(), getHistory()]);
+  const histories = Object.fromEntries(recipes.map(r => [r.id, history[r.id] ?? { count: 0, last: null }]));
 
   app.innerHTML = `
     <section class="page">
@@ -170,7 +154,7 @@ async function showLibrary() {
         <a class="card" href="#/recipe/${encodeURIComponent(r.id)}">
           <div class="chips">
             <span class="chip protein">${esc(r.protein)}</span>
-            ${h.count ? '' : '<span class="chip try">Want to try</span>'}
+            ${isWantToTry(r, history) ? '<span class="chip try">Want to try</span>' : ''}
           </div>
           <h2>${esc(r.title)}</h2>
           <p>${esc(r.description)}</p>
@@ -188,7 +172,7 @@ async function showLibrary() {
 
 // ---------- single recipe ----------
 
-async function showRecipe(id) {
+async function showRecipe(id, plannedServings) {
   const r = await getRecipe(id);
   if (!r) {
     app.innerHTML = `<section class="page"><h1>Recipe not found</h1><p><a href="#/">Back to all recipes</a></p></section>`;
@@ -196,7 +180,7 @@ async function showRecipe(id) {
   }
   const history = await cookedHistory(id);
   const byId = Object.fromEntries(r.ingredients.map(i => [i.id, i]));
-  let servings = r.servings;
+  let servings = plannedServings || r.servings;
   const scale = () => servings / r.servings;
   const n = r.nutrition;
 
@@ -223,7 +207,7 @@ async function showRecipe(id) {
           </div>
           <span class="history">${history.count
             ? `Made ${history.count} time${history.count > 1 ? 's' : ''} · last ${niceDate(history.last)}`
-            : 'Not made yet · on your Want to try list'}</span>
+            : r.rating ? 'Not on the calendar yet' : 'Not made yet · on your Want to try list'}</span>
         </div>
         <div class="actions no-print">
           <button class="btn primary" id="cookBtn" type="button">Start cooking</button>

@@ -4,10 +4,13 @@
 // recipes/{id}                 a recipe, including its family rating
 // recipes/{id}/notes/{noteId}  dated notes
 
+// plan/{YYYY-MM-DD}             one dinner per night (see planner.js for the shape)
+
 import { db, auth } from './firebase.js';
 import {
-  collection, doc, getDoc, getDocs, updateDoc, deleteDoc, addDoc, query, orderBy, writeBatch,
+  collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, query, orderBy, writeBatch,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { buildHistory } from './planner.js';
 
 export async function isMember(email) {
   try {
@@ -31,9 +34,43 @@ export async function getRecipe(id) {
   return { ...d.data(), id, rating: d.data().rating ?? 0, notes: notes.docs.map(n => ({ ...n.data(), id: n.id })) };
 }
 
-// Times made will come from the calendar once the planner is built.
-export async function cookedHistory() {
-  return { count: 0, last: null };
+// ---------- plan ----------
+
+// The whole plan is small (one row per night), so it's read in one go.
+export async function getPlan() {
+  const snap = await getDocs(collection(db, 'plan'));
+  return Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
+}
+
+export async function setNight(date, entry) {
+  await setDoc(doc(db, 'plan', date), { ...entry, date, updatedAt: new Date().toISOString() });
+}
+
+export async function setNights(map) {
+  const batch = writeBatch(db);
+  for (const [date, entry] of Object.entries(map)) {
+    batch.set(doc(db, 'plan', date), { ...entry, date, updatedAt: new Date().toISOString() });
+  }
+  await batch.commit();
+}
+
+export async function clearNight(date) {
+  await deleteDoc(doc(db, 'plan', date));
+}
+
+export async function clearNights(dates) {
+  const batch = writeBatch(db);
+  dates.forEach(d => batch.delete(doc(db, 'plan', d)));
+  await batch.commit();
+}
+
+// Times made: every recipe night on the calendar before today.
+export async function getHistory() {
+  return buildHistory(Object.values(await getPlan()));
+}
+
+export async function cookedHistory(id) {
+  return (await getHistory())[id] ?? { count: 0, last: null };
 }
 
 export async function setRating(id, stars) {
