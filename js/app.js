@@ -1,0 +1,368 @@
+import { listRecipes, getRecipe, cookedHistory, setRating, addNote, deleteNote } from './store.js';
+import {
+  esc, ingredientHTML, ingredientPlain, stepHTML, stepPlain, stepIngredientIds, minutes, niceDate,
+} from './format.js';
+
+const app = document.getElementById('app');
+const cookEl = document.getElementById('cook');
+const toastEl = document.getElementById('toast');
+
+// ---------- small helpers ----------
+
+const STAR_PATH = 'M12 2.6l2.9 6 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9z';
+const star = filled => `<svg class="star ${filled ? 'on' : ''}" viewBox="0 0 24 24" aria-hidden="true"><path d="${STAR_PATH}"/></svg>`;
+const starsShow = n => `<span class="stars" aria-label="${n ? `${n} of 5 stars` : 'Not rated'}">${[1, 2, 3, 4, 5].map(i => star(i <= n)).join('')}</span>`;
+const ICON = {
+  clock: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  search: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>',
+  back: '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
+};
+
+let toastTimer;
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2400);
+}
+
+function totalTime(r) { return minutes((r.prepMin || 0) + (r.cookMin || 0)); }
+
+// ---------- routing ----------
+
+function setNav(page) {
+  document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === page));
+}
+
+async function route() {
+  const [page, id] = location.hash.replace(/^#\/?/, '').split('/');
+  closeCook();
+  window.scrollTo(0, 0);
+  if (page === 'recipe' && id) { setNav('recipes'); return showRecipe(decodeURIComponent(id)); }
+  if (page === 'plan') { setNav('plan'); return showSoon('Monthly planner', 'Put recipes on nights, add leftovers and restaurant nights, and auto-fill the rest of the month.'); }
+  if (page === 'grocery') { setNav('grocery'); return showSoon('Grocery run', 'Build a list from the next seven days, check off what you already have, and copy the rest into Google Keep.'); }
+  setNav('recipes');
+  return showLibrary();
+}
+
+window.addEventListener('hashchange', route);
+route();
+
+// ---------- recipe library ----------
+
+async function showLibrary() {
+  const recipes = await listRecipes();
+  const histories = Object.fromEntries(await Promise.all(recipes.map(async r => [r.id, await cookedHistory(r.id)])));
+
+  app.innerHTML = `
+    <section class="page">
+      <div class="page-head">
+        <h1>Our recipes</h1>
+        <p class="sub">${recipes.length} recipes</p>
+      </div>
+      <label class="search">${ICON.search}<input id="q" type="search" placeholder="Search by name, protein or ingredient" autocomplete="off"></label>
+      <div class="grid" id="grid"></div>
+    </section>`;
+
+  const grid = app.querySelector('#grid');
+  const draw = q => {
+    const needle = q.trim().toLowerCase();
+    const shown = recipes.filter(r => !needle || [r.title, r.protein, ...r.tags, ...r.ingredients.map(i => i.item)]
+      .join(' ').toLowerCase().includes(needle));
+    grid.innerHTML = shown.length ? shown.map(r => {
+      const h = histories[r.id];
+      return `
+        <a class="card" href="#/recipe/${encodeURIComponent(r.id)}">
+          <div class="chips">
+            <span class="chip protein">${esc(r.protein)}</span>
+            ${h.count ? '' : '<span class="chip try">Want to try</span>'}
+          </div>
+          <h2>${esc(r.title)}</h2>
+          <p>${esc(r.description)}</p>
+          <div class="card-meta">
+            ${starsShow(r.rating)}
+            <span class="meta-item">${ICON.clock}${totalTime(r)}</span>
+            ${h.count ? `<span class="meta-item">Made ${h.count}×</span>` : ''}
+          </div>
+        </a>`;
+    }).join('') : '<p class="empty">No recipes match that search.</p>';
+  };
+  draw('');
+  app.querySelector('#q').addEventListener('input', e => draw(e.target.value));
+}
+
+// ---------- single recipe ----------
+
+async function showRecipe(id) {
+  const r = await getRecipe(id);
+  if (!r) {
+    app.innerHTML = `<section class="page"><h1>Recipe not found</h1><p><a href="#/">Back to all recipes</a></p></section>`;
+    return;
+  }
+  const history = await cookedHistory(id);
+  const byId = Object.fromEntries(r.ingredients.map(i => [i.id, i]));
+  let servings = r.servings;
+  const scale = () => servings / r.servings;
+  const n = r.nutrition;
+
+  app.innerHTML = `
+    <article class="recipe">
+      <a class="back no-print" href="#/">${ICON.back}All recipes</a>
+
+      <header class="recipe-head">
+        <div class="chips">
+          <span class="chip protein">${esc(r.protein)}</span>
+          ${r.tags.map(t => `<span class="chip">${esc(t)}</span>`).join('')}
+        </div>
+        <h1>${esc(r.title)}</h1>
+        <p class="lede">${esc(r.description)}</p>
+        <dl class="times">
+          ${r.prepMin ? `<div><dt>Prep</dt><dd>${minutes(r.prepMin)}</dd></div>` : ''}
+          ${r.cookMin ? `<div><dt>Cook</dt><dd>${minutes(r.cookMin)}</dd></div>` : ''}
+          <div><dt>Total</dt><dd>${totalTime(r)}</dd></div>
+          <div class="print-only"><dt>Serves</dt><dd class="serves-print">${servings}</dd></div>
+        </dl>
+        <div class="rate-row no-print">
+          <div class="rate" role="group" aria-label="Rate this recipe">
+            ${[1, 2, 3, 4, 5].map(i => `<button type="button" data-star="${i}" aria-label="Rate ${i} star${i > 1 ? 's' : ''}">${star(i <= r.rating)}</button>`).join('')}
+          </div>
+          <span class="history">${history.count
+            ? `Made ${history.count} time${history.count > 1 ? 's' : ''} · last ${niceDate(history.last)}`
+            : 'Not made yet · on your Want to try list'}</span>
+        </div>
+        <div class="actions no-print">
+          <button class="btn primary" id="cookBtn" type="button">Start cooking</button>
+          <button class="btn" id="shareBtn" type="button">Share by text</button>
+          <button class="btn" id="printBtn" type="button">Print</button>
+        </div>
+      </header>
+
+      <div class="recipe-body">
+        <aside class="ingredients">
+          <div class="ing-head">
+            <h2>Ingredients</h2>
+            <div class="servings no-print" role="group" aria-label="Servings">
+              <button type="button" class="step-btn" data-serv="-1" aria-label="Fewer servings">&minus;</button>
+              <span><strong id="servCount">${servings}</strong> servings</span>
+              <button type="button" class="step-btn" data-serv="1" aria-label="More servings">+</button>
+            </div>
+          </div>
+          <ul class="ing-list" id="ingList"></ul>
+        </aside>
+
+        <section class="method">
+          <h2>Steps</h2>
+          <ol class="steps" id="stepList"></ol>
+          ${r.tips?.length ? `
+            <div class="tips">
+              <h3>Tips</h3>
+              <ul>${r.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+            </div>` : ''}
+        </section>
+      </div>
+
+      ${n ? `
+        <section class="nutrition">
+          <h2>Nutrition <span class="per">per serving</span></h2>
+          <dl class="nut-grid">
+            ${[['Calories', n.calories, ''], ['Protein', n.protein, 'g'], ['Carbs', n.carbs, 'g'], ['Fat', n.fat, 'g'],
+              ['Fiber', n.fiber, 'g'], ['Sugar', n.sugar, 'g'], ['Sodium', n.sodium, 'mg']]
+              .filter(([, v]) => v != null)
+              .map(([k, v, u]) => `<div><dt>${k}</dt><dd>${v}${u}</dd></div>`).join('')}
+          </dl>
+          <p class="fine">Nutrition comes from the original recipe and doesn't change with servings.</p>
+        </section>` : ''}
+
+      <section class="notes no-print">
+        <h2>Our notes</h2>
+        <form id="noteForm" class="note-form">
+          <label class="sr-only" for="noteText">Add a note</label>
+          <textarea id="noteText" rows="2" placeholder="How did it go? What would you change next time?"></textarea>
+          <button class="btn primary" type="submit">Add note</button>
+        </form>
+        <ul class="note-list" id="noteList"></ul>
+      </section>
+
+      <p class="source">${r.source?.url
+        ? `Adapted from <a href="${esc(r.source.url)}" target="_blank" rel="noopener">${esc(r.source.name)}</a>`
+        : esc(r.source?.name || '')}</p>
+    </article>`;
+
+  const ingList = app.querySelector('#ingList');
+  const stepList = app.querySelector('#stepList');
+  const checked = new Set();
+  const doneSteps = new Set();
+
+  function drawScaled() {
+    ingList.innerHTML = r.ingredients.map(i => `
+      <li class="${checked.has(i.id) ? 'got' : ''}">
+        <label><input type="checkbox" data-ing="${i.id}" ${checked.has(i.id) ? 'checked' : ''}><span>${ingredientHTML(i, scale())}</span></label>
+      </li>`).join('');
+    stepList.innerHTML = r.steps.map((s, idx) => `
+      <li class="${doneSteps.has(idx) ? 'done' : ''}" data-step="${idx}">
+        <span class="num">${idx + 1}</span><p>${stepHTML(s, byId, scale())}</p>
+      </li>`).join('');
+    app.querySelector('#servCount').textContent = servings;
+    app.querySelector('.serves-print').textContent = servings;
+  }
+  drawScaled();
+
+  ingList.addEventListener('change', e => {
+    const id = e.target.dataset.ing;
+    if (!id) return;
+    e.target.checked ? checked.add(id) : checked.delete(id);
+    e.target.closest('li').classList.toggle('got', e.target.checked);
+  });
+  stepList.addEventListener('click', e => {
+    const li = e.target.closest('li[data-step]');
+    if (!li) return;
+    const idx = Number(li.dataset.step);
+    doneSteps.has(idx) ? doneSteps.delete(idx) : doneSteps.add(idx);
+    li.classList.toggle('done');
+  });
+  app.querySelectorAll('[data-serv]').forEach(b => b.addEventListener('click', () => {
+    servings = Math.min(24, Math.max(1, servings + Number(b.dataset.serv)));
+    drawScaled();
+  }));
+
+  // rating: tap a star to set it, tap the same star again to clear
+  let rating = r.rating;
+  const rateBtns = app.querySelectorAll('[data-star]');
+  const drawRate = () => rateBtns.forEach(b => b.querySelector('.star').classList.toggle('on', Number(b.dataset.star) <= rating));
+  rateBtns.forEach(b => b.addEventListener('click', async () => {
+    const v = Number(b.dataset.star);
+    rating = rating === v ? 0 : v;
+    drawRate();
+    await setRating(id, rating);
+    toast(rating ? `Rated ${rating} star${rating > 1 ? 's' : ''}` : 'Rating cleared');
+  }));
+
+  // notes
+  let notes = r.notes;
+  const noteList = app.querySelector('#noteList');
+  const drawNotes = () => {
+    noteList.innerHTML = notes.length ? notes.map(nt => `
+      <li>
+        <div class="note-top"><time>${niceDate(nt.date)}</time>
+          <button type="button" class="link-btn" data-del="${esc(nt.id)}">Delete</button></div>
+        <p>${esc(nt.text)}</p>
+      </li>`).join('') : '<li class="empty">No notes yet.</li>';
+  };
+  drawNotes();
+  app.querySelector('#noteForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const box = app.querySelector('#noteText');
+    const text = box.value.trim();
+    if (!text) return;
+    notes = [await addNote(id, text), ...notes];
+    box.value = '';
+    drawNotes();
+  });
+  noteList.addEventListener('click', async e => {
+    const del = e.target.dataset.del;
+    if (!del || !confirm('Delete this note?')) return;
+    await deleteNote(id, del);
+    notes = notes.filter(x => x.id !== del);
+    drawNotes();
+  });
+
+  app.querySelector('#printBtn').addEventListener('click', () => window.print());
+  app.querySelector('#shareBtn').addEventListener('click', () => shareRecipe(r, byId, scale(), servings));
+  app.querySelector('#cookBtn').addEventListener('click', () => openCook(r, byId, scale()));
+}
+
+// The site is behind sign-in, so sharing sends the recipe itself, not a link.
+async function shareRecipe(r, byId, scale, servings) {
+  const text = [
+    r.title,
+    `Serves ${servings} · ${totalTime(r)}`,
+    '',
+    'INGREDIENTS',
+    ...r.ingredients.map(i => `- ${ingredientPlain(i, scale)}`),
+    '',
+    'STEPS',
+    ...r.steps.map((s, i) => `${i + 1}. ${stepPlain(s, byId, scale)}`),
+    ...(r.source?.url ? ['', `Adapted from ${r.source.name}: ${r.source.url}`] : []),
+  ].join('\n');
+
+  if (navigator.share) {
+    try { await navigator.share({ title: r.title, text }); return; } catch (err) { if (err.name === 'AbortError') return; }
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Recipe copied. Paste it into a text.');
+  } catch {
+    toast('Could not copy the recipe on this device.');
+  }
+}
+
+// ---------- cook mode ----------
+
+let wakeLock = null;
+let cookKeys = null;
+
+async function keepAwake() {
+  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* not supported or denied */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (!cookEl.hidden && document.visibilityState === 'visible') keepAwake();
+});
+
+function openCook(r, byId, scale) {
+  let i = 0;
+  const last = r.steps.length - 1;
+  const draw = () => {
+    const ings = stepIngredientIds(r.steps[i]).map(id => byId[id]).filter(Boolean);
+    cookEl.innerHTML = `
+      <div class="cook-top">
+        <span class="cook-title">${esc(r.title)}</span>
+        <button type="button" class="btn" data-cook="close">Done</button>
+      </div>
+      <div class="cook-bar"><span style="width:${((i + 1) / r.steps.length) * 100}%"></span></div>
+      <div class="cook-body">
+        <p class="cook-count">Step ${i + 1} of ${r.steps.length}</p>
+        <p class="cook-step">${stepHTML(r.steps[i], byId, scale)}</p>
+        ${ings.length ? `<div class="cook-ings"><h3>For this step</h3><ul>${ings.map(x => `<li>${ingredientHTML(x, scale)}</li>`).join('')}</ul></div>` : ''}
+      </div>
+      <div class="cook-nav">
+        <button type="button" class="btn big" data-cook="prev" ${i === 0 ? 'disabled' : ''}>Back</button>
+        <button type="button" class="btn big primary" data-cook="${i === last ? 'close' : 'next'}">${i === last ? 'Finish' : 'Next step'}</button>
+      </div>`;
+  };
+  cookEl.onclick = e => {
+    const a = e.target.closest('[data-cook]')?.dataset.cook;
+    if (a === 'next' && i < last) { i++; draw(); }
+    if (a === 'prev' && i > 0) { i--; draw(); }
+    if (a === 'close') closeCook();
+  };
+  cookKeys = e => {
+    if (e.key === 'ArrowRight' && i < last) { i++; draw(); }
+    if (e.key === 'ArrowLeft' && i > 0) { i--; draw(); }
+    if (e.key === 'Escape') closeCook();
+  };
+  document.addEventListener('keydown', cookKeys);
+  draw();
+  cookEl.hidden = false;
+  document.body.classList.add('cooking');
+  keepAwake();
+}
+
+function closeCook() {
+  if (cookEl.hidden) return;
+  cookEl.hidden = true;
+  document.body.classList.remove('cooking');
+  if (cookKeys) document.removeEventListener('keydown', cookKeys);
+  wakeLock?.release?.();
+  wakeLock = null;
+}
+
+// ---------- placeholders ----------
+
+function showSoon(title, text) {
+  app.innerHTML = `
+    <section class="page soon">
+      <h1>${esc(title)}</h1>
+      <p class="sub">${esc(text)}</p>
+      <p class="pill">Coming next</p>
+    </section>`;
+}
