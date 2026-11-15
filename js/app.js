@@ -32,10 +32,11 @@ async function route() {
   window.scrollTo(0, 0);
   if (page === 'recipe' && id) { setNav('recipes'); return showRecipe(decodeURIComponent(id), Number(extra) || null); }
   if (page === 'add') { setNav('recipes'); return showAdd(app); }
-  if (page === 'plan') { setNav('plan'); return showPlan(app, id); }
+  if (page === 'recipes') { setNav('recipes'); return showLibrary(); }
   if (page === 'grocery') { setNav('grocery'); return showGrocery(app, id); }
-  setNav('recipes');
-  return showLibrary();
+  // The plan is the home page.
+  setNav('plan');
+  return showPlan(app, page === 'plan' ? id : undefined);
 }
 
 window.addEventListener('hashchange', route);
@@ -176,7 +177,7 @@ async function showLibrary() {
 async function showRecipe(id, plannedServings) {
   const r = await getRecipe(id);
   if (!r) {
-    app.innerHTML = `<section class="page"><h1>Recipe not found</h1><p><a href="#/">Back to all recipes</a></p></section>`;
+    app.innerHTML = `<section class="page"><h1>Recipe not found</h1><p><a href="#/recipes">Back to all recipes</a></p></section>`;
     return;
   }
   const history = await cookedHistory(id);
@@ -187,7 +188,7 @@ async function showRecipe(id, plannedServings) {
 
   app.innerHTML = `
     <article class="recipe">
-      <a class="back no-print" href="#/">${ICON.back}All recipes</a>
+      <a class="back no-print" href="#/recipes">${ICON.back}All recipes</a>
 
       <header class="recipe-head">
         <div class="chips">
@@ -273,7 +274,7 @@ async function showRecipe(id, plannedServings) {
     if (!confirm(`Delete "${r.title}" and its notes? This can't be undone.`)) return;
     await deleteRecipe(id);
     toast('Recipe deleted');
-    location.hash = '#/';
+    location.hash = '#/recipes';
   });
 
   const ingList = app.querySelector('#ingList');

@@ -32,7 +32,7 @@ export async function showAdd(app) {
 
   app.innerHTML = `
     <section class="page narrow add">
-      <a class="back" href="#/">${ICON.back}All recipes</a>
+      <a class="back" href="#/recipes">${ICON.back}All recipes</a>
       <h1 class="add-title">Add a recipe</h1>
 
       <form id="linkForm" class="link-import">
@@ -306,7 +306,7 @@ export async function showAdd(app) {
       try {
         await saveRecipes(good);
         toast(`Added ${good.length} recipe${good.length > 1 ? 's' : ''}`);
-        location.hash = '#/';
+        location.hash = '#/recipes';
       } catch (err) {
         console.error(err);
         toast('Could not save the recipes. Try again.');
