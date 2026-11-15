@@ -1,7 +1,11 @@
-import { listRecipes, getRecipe, cookedHistory, setRating, addNote, deleteNote } from './store.js';
+import { configured, signIn, signOutUser, watchUser } from './firebase.js';
+import {
+  isMember, listRecipes, getRecipe, cookedHistory, setRating, addNote, deleteNote, saveRecipes, deleteRecipe,
+} from './store.js';
 import {
   esc, ingredientHTML, ingredientPlain, stepHTML, stepPlain, stepIngredientIds, minutes, niceDate,
 } from './format.js';
+import { SAMPLE_RECIPES } from '../data/sample-recipes.js';
 
 const app = document.getElementById('app');
 const cookEl = document.getElementById('cook');
@@ -34,11 +38,15 @@ function setNav(page) {
   document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === page));
 }
 
+let signedIn = false;
+
 async function route() {
+  if (!signedIn) return;
   const [page, id] = location.hash.replace(/^#\/?/, '').split('/');
   closeCook();
   window.scrollTo(0, 0);
   if (page === 'recipe' && id) { setNav('recipes'); return showRecipe(decodeURIComponent(id)); }
+  if (page === 'add') { setNav('recipes'); return showAdd(); }
   if (page === 'plan') { setNav('plan'); return showSoon('Monthly planner', 'Put recipes on nights, add leftovers and restaurant nights, and auto-fill the rest of the month.'); }
   if (page === 'grocery') { setNav('grocery'); return showSoon('Grocery run', 'Build a list from the next seven days, check off what you already have, and copy the rest into Google Keep.'); }
   setNav('recipes');
@@ -46,7 +54,59 @@ async function route() {
 }
 
 window.addEventListener('hashchange', route);
-route();
+
+window.addEventListener('unhandledrejection', e => {
+  console.error(e.reason);
+  toast('Something went wrong. Check your connection and try again.');
+});
+
+// ---------- sign-in ----------
+
+const footer = document.getElementById('foot');
+
+function showSplash(message = '') {
+  signedIn = false;
+  document.body.classList.add('signed-out');
+  footer.hidden = true;
+  app.innerHTML = `
+    <section class="splash">
+      <p class="splash-kicker">The Staub family</p>
+      <h1>Meals</h1>
+      <p class="sub">Our favorite dinner recipes, monthly plan and grocery list.</p>
+      ${message ? `<p class="splash-msg">${message}</p>` : ''}
+      ${configured
+        ? '<button class="btn primary big" id="signInBtn" type="button">Sign in with Google</button>'
+        : '<p class="splash-msg">Sign-in isn\'t set up yet.</p>'}
+    </section>`;
+  app.querySelector('#signInBtn')?.addEventListener('click', async () => {
+    try {
+      await signIn();
+    } catch (err) {
+      if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+        console.error(err);
+        toast('Sign-in didn\'t work. Please try again.');
+      }
+    }
+  });
+}
+
+if (!configured) {
+  showSplash();
+} else {
+  watchUser(async user => {
+    if (!user) return showSplash();
+    if (!(await isMember(user.email))) {
+      await signOutUser();
+      return showSplash(`${esc(user.email)} isn't on this site's list. Sign in with a different Google account.`);
+    }
+    signedIn = true;
+    document.body.classList.remove('signed-out');
+    footer.hidden = false;
+    footer.querySelector('.who').textContent = `Signed in as ${user.displayName || user.email}`;
+    route();
+  });
+  footer.querySelector('button').addEventListener('click', () => signOutUser());
+}
 
 // ---------- recipe library ----------
 
@@ -57,13 +117,23 @@ async function showLibrary() {
   app.innerHTML = `
     <section class="page">
       <div class="page-head">
-        <h1>Our recipes</h1>
-        <p class="sub">${recipes.length} recipes</p>
+        <div>
+          <h1>Our recipes</h1>
+          <p class="sub">${recipes.length} recipe${recipes.length === 1 ? '' : 's'}</p>
+        </div>
+        <a class="btn" href="#/add">Add recipes</a>
       </div>
-      <label class="search">${ICON.search}<input id="q" type="search" placeholder="Search by name, protein or ingredient" autocomplete="off"></label>
-      <div class="grid" id="grid"></div>
+      ${recipes.length ? `
+        <label class="search">${ICON.search}<input id="q" type="search" placeholder="Search by name, protein or ingredient" autocomplete="off"></label>
+        <div class="grid" id="grid"></div>` : `
+        <div class="empty-box">
+          <h2>No recipes yet</h2>
+          <p>Send Claude a recipe link or a Pinterest board, then add the recipes file it gives you.</p>
+          <a class="btn primary" href="#/add">Add recipes</a>
+        </div>`}
     </section>`;
 
+  if (!recipes.length) return;
   const grid = app.querySelector('#grid');
   const draw = q => {
     const needle = q.trim().toLowerCase();
@@ -186,7 +256,15 @@ async function showRecipe(id) {
       <p class="source">${r.source?.url
         ? `Adapted from <a href="${esc(r.source.url)}" target="_blank" rel="noopener">${esc(r.source.name)}</a>`
         : esc(r.source?.name || '')}</p>
+      <p class="no-print"><button type="button" class="link-btn" id="deleteRecipe">Delete this recipe</button></p>
     </article>`;
+
+  app.querySelector('#deleteRecipe').addEventListener('click', async () => {
+    if (!confirm(`Delete "${r.title}" and its notes? This can't be undone.`)) return;
+    await deleteRecipe(id);
+    toast('Recipe deleted');
+    location.hash = '#/';
+  });
 
   const ingList = app.querySelector('#ingList');
   const stepList = app.querySelector('#stepList');
@@ -243,7 +321,7 @@ async function showRecipe(id) {
   const drawNotes = () => {
     noteList.innerHTML = notes.length ? notes.map(nt => `
       <li>
-        <div class="note-top"><time>${niceDate(nt.date)}</time>
+        <div class="note-top"><time>${niceDate(nt.date)}${nt.author ? ` · ${esc(nt.author)}` : ''}</time>
           <button type="button" class="link-btn" data-del="${esc(nt.id)}">Delete</button></div>
         <p>${esc(nt.text)}</p>
       </li>`).join('') : '<li class="empty">No notes yet.</li>';
@@ -354,6 +432,83 @@ function closeCook() {
   if (cookKeys) document.removeEventListener('keydown', cookKeys);
   wakeLock?.release?.();
   wakeLock = null;
+}
+
+// ---------- add recipes ----------
+
+function checkRecipe(r) {
+  const problems = [];
+  if (!r || typeof r !== 'object') return ['not a recipe'];
+  if (!r.id || !/^[a-z0-9-]+$/.test(r.id)) problems.push('missing or bad id');
+  if (!r.title) problems.push('no title');
+  if (!Array.isArray(r.ingredients) || !r.ingredients.length) problems.push('no ingredients');
+  if (!Array.isArray(r.steps) || !r.steps.length) problems.push('no steps');
+  return problems;
+}
+
+async function showAdd() {
+  const existing = new Set((await listRecipes()).map(r => r.id));
+  app.innerHTML = `
+    <section class="page narrow">
+      <a class="back" href="#/">${ICON.back}All recipes</a>
+      <h1 class="add-title">Add recipes</h1>
+      <ol class="how">
+        <li>Send Claude recipe links or a Pinterest board.</li>
+        <li>Claude rewrites each recipe in this site's format and gives you a recipes file (it ends in <strong>.json</strong>).</li>
+        <li>Choose that file below, check the list, and add them.</li>
+      </ol>
+      <label class="btn primary file-btn">Choose recipes file
+        <input type="file" id="file" accept=".json,application/json" hidden>
+      </label>
+      <div id="importPreview"></div>
+      <details class="testing">
+        <summary>Sample recipes for testing</summary>
+        <p>Adds the three sample recipes so you can try the site. Delete them from each recipe page when you're done.</p>
+        <button class="btn" type="button" id="samplesBtn">Add 3 sample recipes</button>
+      </details>
+    </section>`;
+
+  const preview = app.querySelector('#importPreview');
+
+  function showList(list) {
+    const rows = list.map(r => ({ r, problems: checkRecipe(r) }));
+    const good = rows.filter(x => !x.problems.length).map(x => x.r);
+    preview.innerHTML = `
+      <ul class="import-list">
+        ${rows.map(({ r, problems }) => `
+          <li class="${problems.length ? 'bad' : ''}">
+            <span>${esc(r?.title || '(no title)')}</span>
+            <span class="tag">${problems.length ? esc(problems.join(', ')) : existing.has(r.id) ? 'Replaces existing' : 'New'}</span>
+          </li>`).join('')}
+      </ul>
+      ${good.length ? `<button class="btn primary" type="button" id="saveBtn">Add ${good.length} recipe${good.length > 1 ? 's' : ''}</button>` : ''}`;
+    preview.querySelector('#saveBtn')?.addEventListener('click', async e => {
+      e.target.disabled = true;
+      e.target.textContent = 'Adding...';
+      try {
+        await saveRecipes(good);
+        toast(`Added ${good.length} recipe${good.length > 1 ? 's' : ''}`);
+        location.hash = '#/';
+      } catch (err) {
+        console.error(err);
+        toast('Could not save the recipes. Try again.');
+        e.target.disabled = false;
+        e.target.textContent = `Add ${good.length} recipes`;
+      }
+    });
+  }
+
+  app.querySelector('#file').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      showList(Array.isArray(data) ? data : data.recipes || [data]);
+    } catch {
+      preview.innerHTML = '<p class="splash-msg">That file isn\'t a recipes file Claude made. Check that you picked the .json file.</p>';
+    }
+  });
+  app.querySelector('#samplesBtn').addEventListener('click', () => showList(SAMPLE_RECIPES));
 }
 
 // ---------- placeholders ----------

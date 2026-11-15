@@ -222,6 +222,35 @@ button { font: inherit; color: inherit; }
 .cook-nav { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); max-width: 760px; width: 100%; margin: 0 auto; }
 .btn.big { min-height: 56px; font-size: 18px; }
 
+/* ---------- sign-in ---------- */
+body.signed-out .nav { display: none; }
+.splash { text-align: center; max-width: 480px; margin: 0 auto; padding: 18vh 0 40px; }
+.splash h1 { font-size: clamp(56px, 14vw, 88px); letter-spacing: -.02em; margin-bottom: 8px; }
+.splash-kicker { color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: .1em; font-size: 14px; margin: 0 0 4px; }
+.splash .sub { font-size: 18px; margin-bottom: 28px; }
+.splash-msg { background: var(--accent-soft); color: var(--ink); border-radius: 12px; padding: 12px 16px; margin: 0 0 20px; }
+.foot { text-align: center; color: var(--muted); font-size: 14px; padding: 0 16px 32px; }
+
+/* ---------- library extras ---------- */
+.page-head .btn { flex: none; }
+.empty-box { text-align: center; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); padding: 40px 20px; }
+.empty-box h2 { font-size: 24px; margin-bottom: 6px; }
+.empty-box p { color: var(--muted); margin: 0 auto 18px; max-width: 30em; }
+
+/* ---------- add recipes ---------- */
+.narrow { max-width: 640px; }
+.add-title { font-size: 34px; margin: 8px 0 12px; }
+.how { padding-left: 22px; margin: 0 0 20px; }
+.how li + li { margin-top: 4px; }
+.file-btn { cursor: pointer; }
+.import-list { list-style: none; padding: 0; margin: 20px 0 16px; border-top: 1px solid var(--line); }
+.import-list li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.import-list .tag { color: var(--herb); font-weight: 600; font-size: 14px; flex: none; }
+.import-list li.bad .tag { color: var(--accent); }
+.testing { margin-top: 40px; color: var(--muted); }
+.testing summary { cursor: pointer; font-weight: 600; }
+.testing p { margin: 8px 0 12px; }
+
 /* ---------- placeholders ---------- */
 .soon { text-align: center; padding-top: 72px; max-width: 520px; margin: 0 auto; }
 .soon h1 { font-size: 34px; margin-bottom: 10px; }

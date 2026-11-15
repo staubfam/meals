@@ -1,0 +1,23 @@
+rules_version = '2';
+
+// Only people listed in the "members" collection (document ID = their Google email)
+// can read or change anything. Everyone else sees only the sign-in page.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isMember() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/members/$(request.auth.token.email));
+    }
+
+    // Anyone signed in may check whether they themselves are on the list.
+    match /members/{email} {
+      allow get: if request.auth != null && request.auth.token.email == email;
+    }
+
+    match /{document=**} {
+      allow read, write: if isMember();
+    }
+  }
+}
