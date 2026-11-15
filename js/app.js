@@ -5,6 +5,7 @@ import {
 import { star, starsShow, ICON, toast } from './ui.js';
 import { isWantToTry } from './planner.js';
 import { showPlan } from './plan-view.js';
+import { showGrocery } from './grocery-view.js';
 import {
   esc, ingredientHTML, ingredientPlain, stepHTML, stepPlain, stepIngredientIds, minutes, niceDate,
 } from './format.js';
@@ -32,7 +33,7 @@ async function route() {
   if (page === 'recipe' && id) { setNav('recipes'); return showRecipe(decodeURIComponent(id), Number(extra) || null); }
   if (page === 'add') { setNav('recipes'); return showAdd(); }
   if (page === 'plan') { setNav('plan'); return showPlan(app, id); }
-  if (page === 'grocery') { setNav('grocery'); return showSoon('Grocery run', 'Build a list from the next seven days, check off what you already have, and copy the rest into Google Keep.'); }
+  if (page === 'grocery') { setNav('grocery'); return showGrocery(app, id); }
   setNav('recipes');
   return showLibrary();
 }

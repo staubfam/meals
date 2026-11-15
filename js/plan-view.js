@@ -58,6 +58,7 @@ function draw() {
         </div>
         <div class="plan-actions">
           ${month !== today.slice(0, 7) ? `<a class="btn" href="#/plan/${today.slice(0, 7)}">This month</a>` : ''}
+          <a class="btn" href="#/grocery">Grocery run</a>
           <button class="btn primary" type="button" id="fillBtn">Auto-fill</button>
         </div>
       </div>

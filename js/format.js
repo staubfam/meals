@@ -34,7 +34,7 @@ const PLURAL_UNITS = {
   slice: 'slices', stalk: 'stalks', sprig: 'sprigs', pinch: 'pinches', jar: 'jars', bag: 'bags', box: 'boxes',
 };
 
-function unitFor(unit, q) {
+export function unitFor(unit, q) {
   if (!unit) return '';
   if (q == null || q <= 1) return unit;
   const parts = unit.split(' ');

@@ -64,6 +64,18 @@ export async function clearNights(dates) {
   await batch.commit();
 }
 
+// ---------- pantry staples ----------
+// settings/staples = { add: [items you always have], remove: [items a recipe called a staple that aren't] }
+
+export async function getStaples() {
+  const d = await getDoc(doc(db, 'settings', 'staples'));
+  return { add: [], remove: [], ...(d.exists() ? d.data() : {}) };
+}
+
+export async function saveStaples(staples) {
+  await setDoc(doc(db, 'settings', 'staples'), { add: staples.add, remove: staples.remove });
+}
+
 // Times made: every recipe night on the calendar before today.
 export async function getHistory() {
   return buildHistory(Object.values(await getPlan()));
