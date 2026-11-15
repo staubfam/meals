@@ -31,7 +31,7 @@ export function formatQty(q) {
 
 const PLURAL_UNITS = {
   cup: 'cups', clove: 'cloves', can: 'cans', head: 'heads', bunch: 'bunches', package: 'packages',
-  slice: 'slices', stalk: 'stalks', sprig: 'sprigs', pinch: 'pinches', jar: 'jars', bag: 'bags', box: 'boxes',
+  slice: 'slices', stalk: 'stalks', sprig: 'sprigs', stem: 'stems', pinch: 'pinches', jar: 'jars', bag: 'bags', box: 'boxes',
 };
 
 export function unitFor(unit, q) {

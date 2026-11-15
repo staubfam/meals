@@ -397,6 +397,32 @@ a.current-title:hover { color: var(--accent); }
 .keep-tip { margin-top: 12px; }
 @media print { .copy-bar, .keep-tip, .run-pick input { display: none; } }
 
+/* ---------- add a recipe ---------- */
+.link-import label { display: block; font-weight: 700; margin-bottom: 8px; }
+.link-status { margin-top: 12px; }
+.link-status p { margin: 0; }
+.ok-msg { background: var(--herb-soft); color: var(--herb); border-radius: 12px; padding: 12px 16px; font-weight: 600; }
+.link-btn.inline { padding: 0; font-size: inherit; color: var(--accent); }
+.recipe-form { display: grid; gap: 14px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line); }
+.recipe-form[hidden] { display: none; }
+.recipe-form > label, .form-row label { display: grid; gap: 4px; font-weight: 600; font-size: 15px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 520px) { .form-row { grid-template-columns: 1fr; } }
+.recipe-form input, .recipe-form select, .recipe-form textarea {
+  font: 400 16px/1.45 var(--sans); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; width: 100%; min-width: 0;
+}
+.recipe-form textarea { resize: vertical; }
+.rate-line { display: flex; align-items: center; gap: 12px; font-weight: 600; font-size: 15px; }
+.rate-line .star { width: 26px; height: 26px; }
+.preview-h { font-size: 22px; margin-top: 10px; }
+.import-preview { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 16px 10px; }
+.import-preview .ing-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; flex-wrap: wrap; }
+.pv-tags { display: flex; gap: 4px; flex: none; }
+.pv-tags .chip { font-size: 12px; padding: 1px 8px; }
+.import-preview .steps li { cursor: default; }
+.import-preview .steps p { font-size: 16px; }
+
 /* ---------- placeholders ---------- */
 .soon { text-align: center; padding-top: 72px; max-width: 520px; margin: 0 auto; }
 .soon h1 { font-size: 34px; margin-bottom: 10px; }

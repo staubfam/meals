@@ -1,15 +1,15 @@
 import { configured, signIn, signOutUser, watchUser, sendLink, finishLink } from './firebase.js';
 import {
-  isMember, listRecipes, getRecipe, cookedHistory, getHistory, setRating, addNote, deleteNote, saveRecipes, deleteRecipe,
+  isMember, listRecipes, getRecipe, cookedHistory, getHistory, setRating, addNote, deleteNote, deleteRecipe,
 } from './store.js';
 import { star, starsShow, ICON, toast } from './ui.js';
 import { isWantToTry } from './planner.js';
 import { showPlan } from './plan-view.js';
 import { showGrocery } from './grocery-view.js';
+import { showAdd } from './add-view.js';
 import {
   esc, ingredientHTML, ingredientPlain, stepHTML, stepPlain, stepIngredientIds, minutes, niceDate,
 } from './format.js';
-import { SAMPLE_RECIPES } from '../data/sample-recipes.js';
 
 const app = document.getElementById('app');
 const cookEl = document.getElementById('cook');
@@ -31,7 +31,7 @@ async function route() {
   closeCook();
   window.scrollTo(0, 0);
   if (page === 'recipe' && id) { setNav('recipes'); return showRecipe(decodeURIComponent(id), Number(extra) || null); }
-  if (page === 'add') { setNav('recipes'); return showAdd(); }
+  if (page === 'add') { setNav('recipes'); return showAdd(app); }
   if (page === 'plan') { setNav('plan'); return showPlan(app, id); }
   if (page === 'grocery') { setNav('grocery'); return showGrocery(app, id); }
   setNav('recipes');
@@ -442,83 +442,6 @@ function closeCook() {
   if (cookKeys) document.removeEventListener('keydown', cookKeys);
   wakeLock?.release?.();
   wakeLock = null;
-}
-
-// ---------- add recipes ----------
-
-function checkRecipe(r) {
-  const problems = [];
-  if (!r || typeof r !== 'object') return ['not a recipe'];
-  if (!r.id || !/^[a-z0-9-]+$/.test(r.id)) problems.push('missing or bad id');
-  if (!r.title) problems.push('no title');
-  if (!Array.isArray(r.ingredients) || !r.ingredients.length) problems.push('no ingredients');
-  if (!Array.isArray(r.steps) || !r.steps.length) problems.push('no steps');
-  return problems;
-}
-
-async function showAdd() {
-  const existing = new Set((await listRecipes()).map(r => r.id));
-  app.innerHTML = `
-    <section class="page narrow">
-      <a class="back" href="#/">${ICON.back}All recipes</a>
-      <h1 class="add-title">Add recipes</h1>
-      <ol class="how">
-        <li>Send Claude recipe links or a Pinterest board.</li>
-        <li>Claude rewrites each recipe in this site's format and gives you a recipes file (it ends in <strong>.json</strong>).</li>
-        <li>Choose that file below, check the list, and add them.</li>
-      </ol>
-      <label class="btn primary file-btn">Choose recipes file
-        <input type="file" id="file" accept=".json,application/json" hidden>
-      </label>
-      <div id="importPreview"></div>
-      <details class="testing">
-        <summary>Sample recipes for testing</summary>
-        <p>Adds the three sample recipes so you can try the site. Delete them from each recipe page when you're done.</p>
-        <button class="btn" type="button" id="samplesBtn">Add 3 sample recipes</button>
-      </details>
-    </section>`;
-
-  const preview = app.querySelector('#importPreview');
-
-  function showList(list) {
-    const rows = list.map(r => ({ r, problems: checkRecipe(r) }));
-    const good = rows.filter(x => !x.problems.length).map(x => x.r);
-    preview.innerHTML = `
-      <ul class="import-list">
-        ${rows.map(({ r, problems }) => `
-          <li class="${problems.length ? 'bad' : ''}">
-            <span>${esc(r?.title || '(no title)')}</span>
-            <span class="tag">${problems.length ? esc(problems.join(', ')) : existing.has(r.id) ? 'Replaces existing' : 'New'}</span>
-          </li>`).join('')}
-      </ul>
-      ${good.length ? `<button class="btn primary" type="button" id="saveBtn">Add ${good.length} recipe${good.length > 1 ? 's' : ''}</button>` : ''}`;
-    preview.querySelector('#saveBtn')?.addEventListener('click', async e => {
-      e.target.disabled = true;
-      e.target.textContent = 'Adding...';
-      try {
-        await saveRecipes(good);
-        toast(`Added ${good.length} recipe${good.length > 1 ? 's' : ''}`);
-        location.hash = '#/';
-      } catch (err) {
-        console.error(err);
-        toast('Could not save the recipes. Try again.');
-        e.target.disabled = false;
-        e.target.textContent = `Add ${good.length} recipes`;
-      }
-    });
-  }
-
-  app.querySelector('#file').addEventListener('change', async e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      const data = JSON.parse(await file.text());
-      showList(Array.isArray(data) ? data : data.recipes || [data]);
-    } catch {
-      preview.innerHTML = '<p class="splash-msg">That file isn\'t a recipes file Claude made. Check that you picked the .json file.</p>';
-    }
-  });
-  app.querySelector('#samplesBtn').addEventListener('click', () => showList(SAMPLE_RECIPES));
 }
 
 // ---------- placeholders ----------
