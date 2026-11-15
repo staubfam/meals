@@ -195,16 +195,12 @@ export async function showAdd(app) {
           status.innerHTML = '<p class="splash-msg">That page wasn\'t found. Check the link and try again.</p>';
           return;
         }
-        openForm({ url, siteName: new URL(url).hostname.replace(/^www\./, ''), title: blocked ? '' : (page.pageTitle || '').split(/ [|–-] /)[0] });
-        status.innerHTML = `<p class="splash-msg">${blocked ? "This site blocks automatic imports." : "Couldn't find a recipe on that page."}
-          Copy the ingredients and steps from the page and paste them below, or save it for Claude to add.</p>
-          <button type="button" class="btn" data-save-claude>Save it for Claude</button>`;
+        await autoSave(url, blocked ? '' : (page.pageTitle || '').split(/ [|–-] /)[0],
+          blocked ? 'This site blocks automatic imports' : "Couldn't find a recipe on that page");
       }
     } catch (err) {
       console.error(err);
-      openForm({ url, siteName: (() => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; } })() });
-      status.innerHTML = `<p class="splash-msg">That site wouldn't share the recipe. Copy the ingredients and steps from the page and paste them below, or save it for Claude to add.</p>
-        <button type="button" class="btn" data-save-claude>Save it for Claude</button>`;
+      await autoSave(url, '', "That site wouldn't share the recipe");
     } finally {
       btn.disabled = false;
       btn.textContent = 'Get recipe';
@@ -237,6 +233,30 @@ export async function showAdd(app) {
   }
   drawInbox();
 
+  // A link that can't be imported goes straight onto the Saved for Claude list.
+  let failed = null;
+  async function autoSave(url, title, why) {
+    failed = { url, title };
+    let added = false;
+    try { added = await addToInbox(url, title); } catch (err) {
+      console.error(err);
+      status.innerHTML = `<p class="splash-msg">${why}, and saving it for Claude didn't work. Check your connection and try again.</p>`;
+      return;
+    }
+    $('#linkUrl').value = '';
+    form.hidden = true;
+    status.innerHTML = `<p class="ok-msg">${why}, so it's ${added ? 'saved' : 'already saved'} for Claude to add at the start of the next Meals session.</p>
+      <p class="fine">Want it sooner? <button type="button" class="link-btn" data-type-now>Type or paste it in now</button></p>`;
+    drawInbox();
+  }
+  status.addEventListener('click', e => {
+    if (!e.target.closest('[data-type-now]') || !failed) return;
+    const { url, title } = failed;
+    status.innerHTML = '<p class="fine">Copy the ingredients and steps from the recipe page into the form below. Once it\'s saved, the link comes off the Saved for Claude list.</p>';
+    openForm({ url, title, siteName: (() => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; } })() });
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
   async function saveForClaude() {
     let url = $('#linkUrl').value.trim();
     if (!url) { toast('Paste the link in the box first.'); $('#linkUrl').focus(); return; }
@@ -250,7 +270,6 @@ export async function showAdd(app) {
     drawInbox();
   }
   $('#saveLink').addEventListener('click', saveForClaude);
-  status.addEventListener('click', e => { if (e.target.closest('[data-save-claude]')) saveForClaude(); });
 
   // ----- saving -----
 
