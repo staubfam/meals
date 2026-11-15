@@ -66,7 +66,7 @@ export const SAMPLE_RECIPES = [
     ingredients: [
       { id: 'i1', qty: 2, unit: 'lb', item: 'lean ground beef', note: '90% lean', aisle: 'Meat' },
       { id: 'i2', qty: 1, item: 'yellow onion', itemPlural: 'yellow onions', note: 'diced', aisle: 'Produce' },
-      { id: 'i3', qty: 1, unit: '15-oz can', item: 'black beans', note: 'drained and rinsed', aisle: 'Canned goods' },
+      { id: 'i3', qty: 1, unit: '(15-oz) can', item: 'black beans', note: 'drained and rinsed', aisle: 'Canned goods' },
       { id: 'i4', qty: 2, unit: 'tbsp', item: 'chili powder', aisle: 'Spices', staple: true },
       { id: 'i5', qty: 2, unit: 'tsp', item: 'ground cumin', aisle: 'Spices', staple: true },
       { id: 'i6', qty: 1, unit: 'tsp', item: 'garlic powder', aisle: 'Spices', staple: true },
