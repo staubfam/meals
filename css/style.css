@@ -423,6 +423,13 @@ a.current-title:hover { color: var(--accent); }
 .import-preview .steps li { cursor: default; }
 .import-preview .steps p { font-size: 16px; }
 
+.link-status .btn { margin-top: 10px; }
+.inbox { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px 6px; }
+.inbox h2 { font-size: 20px; }
+.inbox .fine { margin: 4px 0 6px; }
+.inbox a.g-text { color: var(--ink); text-decoration: none; overflow-wrap: anywhere; }
+.inbox a.g-text:hover { color: var(--accent); }
+
 /* ---------- placeholders ---------- */
 .soon { text-align: center; padding-top: 72px; max-width: 520px; margin: 0 auto; }
 .soon h1 { font-size: 34px; margin-bottom: 10px; }

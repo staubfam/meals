@@ -1,8 +1,8 @@
-import { listRecipes, saveRecipes } from './store.js';
+import { listRecipes, saveRecipes, listInbox, addToInbox, removeFromInbox } from './store.js';
 import {
   readRecipePage, buildRecipe, guessProtein, guessTags, parseIngredient, PROTEINS, TARGET_SERVINGS,
 } from './import.js';
-import { esc, ingredientHTML, stepHTML } from './format.js';
+import { esc, ingredientHTML, stepHTML, niceDate } from './format.js';
 import { star, ICON, toast } from './ui.js';
 import { SAMPLE_RECIPES } from '../data/sample-recipes.js';
 
@@ -43,7 +43,9 @@ export async function showAdd(app) {
         </div>
       </form>
       <div id="linkStatus" class="link-status" role="status"></div>
-      <p class="fine">No link? <button type="button" class="link-btn inline" id="typeIt">Type or paste a recipe instead</button></p>
+      <p class="fine">No link? <button type="button" class="link-btn inline" id="typeIt">Type or paste a recipe instead</button>
+        · Rather have Claude do it? <button type="button" class="link-btn inline" id="saveLink">Save the link for Claude</button></p>
+      <div id="inbox"></div>
 
       <form id="recipeForm" class="recipe-form" hidden>
         <div id="dupWarn"></div>
@@ -195,12 +197,14 @@ export async function showAdd(app) {
         }
         openForm({ url, siteName: new URL(url).hostname.replace(/^www\./, ''), title: blocked ? '' : (page.pageTitle || '').split(/ [|–-] /)[0] });
         status.innerHTML = `<p class="splash-msg">${blocked ? "This site blocks automatic imports." : "Couldn't find a recipe on that page."}
-          Copy the ingredients and steps from the page and paste them below, or send the link to Claude.</p>`;
+          Copy the ingredients and steps from the page and paste them below, or save it for Claude to add.</p>
+          <button type="button" class="btn" data-save-claude>Save it for Claude</button>`;
       }
     } catch (err) {
       console.error(err);
       openForm({ url, siteName: (() => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; } })() });
-      status.innerHTML = `<p class="splash-msg">That site wouldn't share the recipe. Copy the ingredients and steps from the page and paste them below, or send the link to Claude.</p>`;
+      status.innerHTML = `<p class="splash-msg">That site wouldn't share the recipe. Copy the ingredients and steps from the page and paste them below, or save it for Claude to add.</p>
+        <button type="button" class="btn" data-save-claude>Save it for Claude</button>`;
     } finally {
       btn.disabled = false;
       btn.textContent = 'Get recipe';
@@ -208,6 +212,45 @@ export async function showAdd(app) {
   });
 
   $('#typeIt').addEventListener('click', () => { status.innerHTML = ''; openForm({ servings: TARGET_SERVINGS }); $('#fTitle').focus(); });
+
+  // ----- saved for Claude -----
+
+  async function drawInbox() {
+    const box = $('#inbox');
+    let items = [];
+    try { items = await listInbox(); } catch (err) { console.error(err); }
+    box.innerHTML = items.length ? `
+      <div class="inbox">
+        <h2>Saved for Claude <span class="fine">(${items.length})</span></h2>
+        <p class="fine">Claude adds these at the start of the next Meals session. They disappear once the recipe is in.</p>
+        <ul class="g-list">${items.map(x => `
+          <li class="g-row">
+            <span class="g-main"><a class="g-text" href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title || x.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 70))}</a>
+              <span class="g-for">${esc(niceDate(x.addedAt))}${x.addedBy ? ' · ' + esc(x.addedBy) : ''}</span></span>
+            <button type="button" class="link-btn" data-unsave="${esc(x.id)}">Remove</button>
+          </li>`).join('')}</ul>
+      </div>` : '';
+    box.querySelectorAll('[data-unsave]').forEach(b => b.addEventListener('click', async () => {
+      await removeFromInbox(b.dataset.unsave);
+      drawInbox();
+    }));
+  }
+  drawInbox();
+
+  async function saveForClaude() {
+    let url = $('#linkUrl').value.trim();
+    if (!url) { toast('Paste the link in the box first.'); $('#linkUrl').focus(); return; }
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    try { new URL(url); } catch { toast("That doesn't look like a link."); return; }
+    const added = await addToInbox(url, $('#fTitle')?.value?.trim() || '');
+    toast(added ? 'Saved for Claude' : 'That link is already saved for Claude');
+    $('#linkUrl').value = '';
+    status.innerHTML = '';
+    form.hidden = true;
+    drawInbox();
+  }
+  $('#saveLink').addEventListener('click', saveForClaude);
+  status.addEventListener('click', e => { if (e.target.closest('[data-save-claude]')) saveForClaude(); });
 
   // ----- saving -----
 

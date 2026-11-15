@@ -64,6 +64,37 @@ export async function clearNights(dates) {
   await batch.commit();
 }
 
+// ---------- saved for Claude ----------
+// inbox/{id} = { url, title, addedAt, addedBy }: links the site couldn't import, for Claude to add.
+
+const sameUrl = u => String(u || '').replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/^https?:\/\/(www\.)?/i, '').toLowerCase();
+
+export async function listInbox() {
+  const snap = await getDocs(collection(db, 'inbox'));
+  return snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a, b) => a.addedAt.localeCompare(b.addedAt));
+}
+
+export async function addToInbox(url, title = '') {
+  const existing = await listInbox();
+  if (existing.some(x => sameUrl(x.url) === sameUrl(url))) return false;
+  await addDoc(collection(db, 'inbox'), {
+    url, title, addedAt: new Date().toISOString(), addedBy: (auth.currentUser?.displayName || '').split(' ')[0],
+  });
+  return true;
+}
+
+export async function removeFromInbox(id) {
+  await deleteDoc(doc(db, 'inbox', id));
+}
+
+// Called after recipes are saved: their links are done.
+async function clearInboxFor(recipes) {
+  const urls = new Set(recipes.map(r => sameUrl(r.source?.url)).filter(Boolean));
+  if (!urls.size) return;
+  const items = await listInbox();
+  await Promise.all(items.filter(x => urls.has(sameUrl(x.url))).map(x => removeFromInbox(x.id)));
+}
+
 // ---------- pantry staples ----------
 // settings/staples = { add: [items you always have], remove: [items a recipe called a staple that aren't] }
 
@@ -116,6 +147,7 @@ export async function saveRecipes(list) {
     }
     await batch.commit();
   }
+  try { await clearInboxFor(list); } catch (err) { console.error(err); }
 }
 
 export async function deleteRecipe(id) {
