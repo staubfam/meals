@@ -1,4 +1,4 @@
-import { configured, signIn, signOutUser, watchUser } from './firebase.js';
+import { configured, signIn, signOutUser, watchUser, sendLink, finishLink } from './firebase.js';
 import {
   isMember, listRecipes, getRecipe, cookedHistory, setRating, addNote, deleteNote, saveRecipes, deleteRecipe,
 } from './store.js';
@@ -74,9 +74,16 @@ function showSplash(message = '') {
       <h1>Meals</h1>
       <p class="sub">Our favorite dinner recipes, monthly plan and grocery list.</p>
       ${message ? `<p class="splash-msg">${message}</p>` : ''}
-      ${configured
-        ? '<button class="btn primary big" id="signInBtn" type="button">Sign in with Google</button>'
-        : '<p class="splash-msg">Sign-in isn\'t set up yet.</p>'}
+      ${configured ? `
+        <button class="btn primary big" id="signInBtn" type="button">Sign in with Google</button>
+        <div class="or"><span>or</span></div>
+        <form id="linkForm" class="link-form">
+          <label for="linkEmail">Get a sign-in link by email</label>
+          <div class="link-row">
+            <input id="linkEmail" type="email" required autocomplete="email" placeholder="you@gmail.com">
+            <button class="btn" type="submit">Email me a link</button>
+          </div>
+        </form>` : '<p class="splash-msg">Sign-in isn\'t set up yet.</p>'}
     </section>`;
   app.querySelector('#signInBtn')?.addEventListener('click', async () => {
     try {
@@ -84,8 +91,22 @@ function showSplash(message = '') {
     } catch (err) {
       if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
         console.error(err);
-        toast('Sign-in didn\'t work. Please try again.');
+        toast('Google sign-in didn\'t work here. Try the email link instead.');
       }
+    }
+  });
+  app.querySelector('#linkForm')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const email = app.querySelector('#linkEmail').value.trim().toLowerCase();
+    const btn = e.target.querySelector('button');
+    btn.disabled = true;
+    try {
+      await sendLink(email);
+      e.target.outerHTML = `<p class="splash-msg">Check <strong>${esc(email)}</strong> for an email with a sign-in link. Open the link on this same device. If it isn't there in a minute, check spam.</p>`;
+    } catch (err) {
+      console.error(err);
+      btn.disabled = false;
+      toast('Couldn\'t send the email. Check the address and try again.');
     }
   });
 }
@@ -93,6 +114,10 @@ function showSplash(message = '') {
 if (!configured) {
   showSplash();
 } else {
+  finishLink().catch(err => {
+    console.error(err);
+    showSplash('That sign-in link didn\'t work. It may have expired or already been used. Ask for a new one below.');
+  });
   watchUser(async user => {
     if (!user) return showSplash();
     if (!(await isMember(user.email))) {
