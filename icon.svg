@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Pizza with one slice missing (top-right wedge, -90deg to -30deg) -->
+  <path d="M32 32 L56.25 18 A28 28 0 1 1 32 4 Z" fill="#d9a35b" stroke="#a8743a" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M32 32 L51.92 20.5 A23 23 0 1 1 32 9 Z" fill="#f2c14e"/>
+  <circle cx="20" cy="22" r="3.6" fill="#b5482b"/>
+  <circle cx="46" cy="31" r="3.6" fill="#b5482b"/>
+  <circle cx="42" cy="44" r="3.6" fill="#b5482b"/>
+  <circle cx="25" cy="45" r="3.6" fill="#b5482b"/>
+  <circle cx="16" cy="34" r="3.2" fill="#b5482b"/>
+  <circle cx="32" cy="35" r="3" fill="#b5482b"/>
+</svg>
